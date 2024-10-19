@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -27,16 +28,23 @@ type Response struct {
 func sendJSON(w http.ResponseWriter, response Response, status int) {
 	data, err := json.Marshal(response)
 	if err != nil {
-		log.Println("Error marshalling response:", err)
+		slog.Error("Error marshalling response:", "error", err)
 		sendJSON(w, Response{Error: "Internal server error."}, http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(status)
-	w.Write(data)
+	if _, err := w.Write(data); err != nil {
+		slog.Error("Error writing response:", "error", err)
+	}
 }
 
 func main() {
+	// Set default logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	// Create new router
 	r := chi.NewMux()
 
 	// Middleware
@@ -68,6 +76,12 @@ func main() {
 	})
 
 	// Start server
+	slog.Info(
+		"Starting server on port 8080",
+		slog.String("version", "1.0.0"),
+		slog.String("env", "dev"),
+		slog.String("port", "8080"),
+	)
 	if err := http.ListenAndServe(":8080", r); err != nil {
 		panic(err)
 	}
@@ -83,7 +97,7 @@ func jsonMiddleware(next http.Handler) http.Handler {
 func handleGetUser(db map[uint64]User) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		idStr := chi.URLParam(r, "id")
-		id, _ := strconv.ParseUint(idStr, 10, 64) // Ignore error because we know the input is a number
+		id, _ := strconv.ParseUint(idStr, 10, 64)
 
 		user, ok := db[id]
 		if !ok {
@@ -106,7 +120,7 @@ func handleCreateUser(db map[uint64]User) http.HandlerFunc {
 			if errors.As(err, &maxErr) {
 				sendJSON(w, Response{Error: "Request body too large."}, http.StatusRequestEntityTooLarge)
 			} else {
-				log.Println("Error reading request body:", err)
+				slog.Error("Error reading request body:", "error", err)
 				sendJSON(w, Response{Error: "Internal server error."}, http.StatusInternalServerError)
 			}
 			return
@@ -114,7 +128,7 @@ func handleCreateUser(db map[uint64]User) http.HandlerFunc {
 
 		var user User
 		if err := json.Unmarshal(data, &user); err != nil {
-			log.Println("Error unmarshalling user:", err)
+			slog.Error("Error unmarshalling user:", "error", err)
 			sendJSON(w, Response{Error: "Invalid request payload."}, http.StatusUnprocessableEntity)
 			return
 		}
