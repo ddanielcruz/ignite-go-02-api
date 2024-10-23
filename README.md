@@ -1,4 +1,4 @@
-# URL Shortener
+# Ignite Go 02 - API
 
 This project is a simple URL shortener service built with Go, demonstrating the use of the standard library's HTTP server and the Chi router. It's part of the [Rocketseat Golang course](rocketseat.com.br).
 
